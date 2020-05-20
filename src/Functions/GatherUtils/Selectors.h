@@ -158,6 +158,27 @@ struct ArraySourcePairSelector
     }
 };
 
+ template <typename Base>
+ struct ArrayAndValueSourcePairSelector
+ {
+    template <typename ... Args>
+    static void select(IArraySource & first, IValueSource & second, Args && ... args)
+    {
+        ArraySourceSelector<Base>::select(first, second, args ...);
+    }
+
+    template <typename FirstSource, typename ... Args>
+    static void selectImpl(FirstSource && first, IValueSource & second, Args && ... args)
+    {
+        ValueSourceSelector<Base>::select(second, first, args ...);
+    }
+
+    template <typename SecondSource, typename FirstSource, typename ... Args>
+    static void selectImpl(SecondSource && second, FirstSource && first, Args && ... args)
+    {
+        Base::selectSourcePair(first, second, args ...);
+    }
+ };
 template <typename Base>
 struct ArrayAndValueSourceSelectorBySink : public ArraySinkSelector<ArrayAndValueSourceSelectorBySink<Base>>
 {

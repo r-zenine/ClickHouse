@@ -614,4 +614,22 @@ void resizeConstantSize(ArraySource && array_source, ValueSource && value_source
     }
 }
 
+template <typename T, typename U>
+bool sortedSearchImpl(const NumericArraySlice<T> & /*first*/, const NumericValueSlice<T> & /*second*/) {
+    return false;
+}
+
+
+template <typename FirstSource, typename SecondSource>
+void arraySortedSearch(FirstSource && first, SecondSource && second, ColumnUInt8 & result)
+{
+    auto size = result.size();
+    auto & data = result.getData();
+    for (auto row : ext::range(0, size))
+    {
+        data[row] = 1;//sortedSearchImpl(first.getWhole(), second.getWhole());
+        first.next();
+        second.next();
+    }
+}
 }

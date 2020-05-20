@@ -46,6 +46,7 @@ void sliceDynamicOffsetUnbounded(IArraySource & src, IArraySink & sink, const IC
 void sliceDynamicOffsetBounded(IArraySource & src, IArraySink & sink, const IColumn & offset_column, const IColumn & length_column);
 
 void sliceHas(IArraySource & first, IArraySource & second, bool all, ColumnUInt8 & result);
+void sortedSearch(IArraySource & first, IValueSource & second, ColumnUInt8 & result);
 
 void push(IArraySource & array_source, IValueSource & value_source, IArraySink & sink, bool push_front);
 
