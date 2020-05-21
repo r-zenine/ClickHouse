@@ -6,6 +6,9 @@
 #include "Sinks.h"
 #include <Core/AccurateComparison.h>
 #include <ext/range.h>
+#include <algorithm>
+#include <cassert>
+
 
 
 namespace DB::ErrorCodes
@@ -615,10 +618,127 @@ void resizeConstantSize(ArraySource && array_source, ValueSource && value_source
 }
 
 template <typename T, typename U>
-bool sortedSearchImpl(const NumericArraySlice<T> & /*first*/, const NumericValueSlice<T> & /*second*/) {
+bool equalElements(const T & first [[maybe_unused]],
+                  const U & second [[maybe_unused]])
+{
+    /// TODO: Decimal scale
+    if constexpr (IsDecimalNumber<T> && IsDecimalNumber<U>)
+        return accurate::equalsOp(typename T::NativeType(first), typename U::NativeType(second));
+    else if constexpr (IsDecimalNumber<T> || IsDecimalNumber<U>)
+        return false;
+    else
+        return accurate::equalsOp(first, second);
+}
+
+template <typename T, typename U>
+bool greaterElements(const T & first [[maybe_unused]],
+                  const U & second [[maybe_unused]])
+{
+    /// TODO: Decimal scale
+    if constexpr (IsDecimalNumber<T> && IsDecimalNumber<U>)
+        return accurate::greaterOp(typename T::NativeType(first), typename U::NativeType(second));
+    else if constexpr (IsDecimalNumber<T> || IsDecimalNumber<U>)
+        return false;
+    else
+        return accurate::greaterOp(first, second);
+}
+template <typename T, typename U>
+bool lowerElements(const T & first [[maybe_unused]],
+                  const U & second [[maybe_unused]])
+{
+    /// TODO: Decimal scale
+    if constexpr (IsDecimalNumber<T> && IsDecimalNumber<U>)
+        return !accurate::greaterOp(typename T::NativeType(first), typename U::NativeType(second));
+    else if constexpr (IsDecimalNumber<T> || IsDecimalNumber<U>)
+        return false;
+    else
+        return !accurate::greaterOp(first, second);
+}
+
+bool sortedSearchImpl(const GenericArraySlice & /*first*/, const GenericValueSlice & /*second*/);
+
+
+template <typename T, typename U>
+int smallest(const T & a, const U & b) {
+    int ap;
+    int bp;
+    if constexpr (IsDecimalNumber<T>){
+        ap = getWholePart(a);
+    } else { 
+        ap = static_cast<int>(a);
+    }
+    if constexpr (IsDecimalNumber<U>){
+        bp = getWholePart(b);
+    } else { 
+        bp = static_cast<int>(b);
+    }
+    return std::min(ap, bp);
+}
+
+template <typename T, typename U>
+bool sortedSearchImpl(const NumericArraySlice<T> & first, const NumericValueSlice<U> & second) {
+    // Implement Interpollated search.
+    auto key = second.value;
+    auto lo = static_cast<int>(0); 
+    auto hi = static_cast<int>(first.size);
+    //auto range = static_cast<float>(hi  - lo);
+    //auto variation = (static_cast<float>(first.data[hi]) - static_cast<float>(first.data[lo]));
+    //auto slope = range / variation;
+
+    // This works.
+    if (first.size == 0 || greaterElements(first.data[0], key) || greaterElements(key, first.data[first.size - 1])) {
+        return false;
+    }
+
+    // greaterElements is working.
+    while (greaterElements(key , first.data[lo])) {
+      //auto midFP = slope * (key - first.data[lo]);
+      //auto mid = lo + smallest(hi - lo / 2, midFP);
+      auto mid = lo + static_cast<int>(( hi - lo ) / 2);
+
+      if (greaterElements(key, first.data[mid])) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+
+    // This works, First element of the list is found.
+    if (!equalElements(first.data[lo], key)) {
+      return false;
+    }
+    return true;
+}
+
+template <typename T>
+bool sortedSearchImpl(const NumericArraySlice<T> & /*first*/, const GenericValueSlice & /*second*/) {
     return false;
 }
 
+template <typename U>
+bool sortedSearchImpl(const GenericArraySlice & /*first*/, const NumericValueSlice<U> & /*second*/) {
+    return false;
+}
+
+template <typename FirstSlice, typename SecondSlice>
+bool sortedSearchAbstract(const FirstSlice & first, const SecondSlice & second) {
+    return sortedSearchImpl(first, second);
+}
+
+template <typename FirstSlice, typename SecondSlice>
+bool sortedSearchAbstract(const NullableSlice<FirstSlice> & first, const NullableSlice<SecondSlice> & second) {
+    return sortedSearchImpl(first, second);
+}
+
+template <typename FirstSlice, typename SecondSlice>
+bool sortedSearchAbstract(const FirstSlice & first, const NullableSlice<SecondSlice> & second) {
+    return sortedSearchImpl(first, second);
+}
+
+template <typename FirstSlice, typename SecondSlice>
+bool sortedSearchAbstract(const NullableSlice<FirstSlice> & first, const SecondSlice & second) {
+    return sortedSearchImpl(first, second);
+}
 
 template <typename FirstSource, typename SecondSource>
 void arraySortedSearch(FirstSource && first, SecondSource && second, ColumnUInt8 & result)
@@ -627,7 +747,7 @@ void arraySortedSearch(FirstSource && first, SecondSource && second, ColumnUInt8
     auto & data = result.getData();
     for (auto row : ext::range(0, size))
     {
-        data[row] = 1;//sortedSearchImpl(first.getWhole(), second.getWhole());
+        data[row] = sortedSearchAbstract(first.getWhole(), second.getWhole());
         first.next();
         second.next();
     }
